@@ -5,20 +5,41 @@ using Microsoft.Extensions.Configuration;
 using System;
 using System.Collections.Generic;
 using System.Data.SqlClient;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace IdentityDapperCore.Stores
 {
-    public class UserStore : 
-        IUserStore<ApplicationUser>,  
+    public class UserStore :
+        IUserStore<ApplicationUser>,
         IUserEmailStore<ApplicationUser>,
         IUserPhoneNumberStore<ApplicationUser>,
         IUserTwoFactorStore<ApplicationUser>,
-        IUserPasswordStore<ApplicationUser>
+        IUserPasswordStore<ApplicationUser>,
+        IQueryableUserStore<ApplicationUser>,
+        IUserRoleStore<ApplicationUser>
     {
         private readonly string _connectionString;
+
+        public IQueryable<ApplicationUser> Users
+        {
+            get
+            {
+                var sql = @"
+                            SELECT 
+                                *
+                            FROM ApplicationUser";
+
+                using (var connection = new SqlConnection(_connectionString))
+                {
+                    var result = connection.Query<ApplicationUser>(sql);
+
+                    return result.AsQueryable();
+                }
+            }
+        }
 
         public UserStore(IConfiguration configuration)
         {
@@ -26,22 +47,39 @@ namespace IdentityDapperCore.Stores
         }
         public async Task<IdentityResult> CreateAsync(ApplicationUser user, CancellationToken cancellationToken)
         {
+
             cancellationToken.ThrowIfCancellationRequested();
 
             using (var connection = new SqlConnection(_connectionString))
             {
                 await connection.OpenAsync(cancellationToken);
-                user.Id = await connection.QuerySingleAsync<int>($@"INSERT INTO [ApplicationUser] ([UserName], [NormalizedUserName], [Email],
-                [NormalizedEmail], [EmailConfirmed], [PasswordHash], [PhoneNumber], [PhoneNumberConfirmed], [TwoFactorEnabled])
-                VALUES (@{nameof(ApplicationUser.UserName)}, @{nameof(ApplicationUser.NormalizedUserName)}, @{nameof(ApplicationUser.Email)},
-                @{nameof(ApplicationUser.NormalizedEmail)}, @{nameof(ApplicationUser.EmailConfirmed)}, @{nameof(ApplicationUser.PasswordHash)},
-                @{nameof(ApplicationUser.PhoneNumber)}, @{nameof(ApplicationUser.PhoneNumberConfirmed)}, @{nameof(ApplicationUser.TwoFactorEnabled)});
+                user.Id = await connection.QuerySingleAsync<int>($@"INSERT INTO [ApplicationUser] 
+                ([UserName], 
+                [NormalizedUserName], 
+                [Email],
+                [NormalizedEmail], 
+                [EmailConfirmed],
+                [PasswordHash], 
+                [PhoneNumber], 
+                [PhoneNumberConfirmed], 
+                [TwoFactorEnabled])
+                VALUES (
+                @{nameof(ApplicationUser.UserName)}, 
+                @{nameof(ApplicationUser.NormalizedUserName)}, 
+                @{nameof(ApplicationUser.Email)},
+                @{nameof(ApplicationUser.NormalizedEmail)}, 
+                @{nameof(ApplicationUser.EmailConfirmed)}, 
+                @{nameof(ApplicationUser.PasswordHash)},
+                @{nameof(ApplicationUser.PhoneNumber)}, 
+                @{nameof(ApplicationUser.PhoneNumberConfirmed)}, 
+                @{nameof(ApplicationUser.TwoFactorEnabled)});
                 SELECT CAST(SCOPE_IDENTITY() as int)", user);
             }
 
             return IdentityResult.Success;
 
         }
+    
 
         public async Task<IdentityResult> DeleteAsync(ApplicationUser user, CancellationToken cancellationToken)
         {
@@ -58,7 +96,7 @@ namespace IdentityDapperCore.Stores
 
         public void Dispose()
         {
-            throw new NotImplementedException();
+           
         }
 
         public async Task<ApplicationUser> FindByEmailAsync(string normalizedEmail, CancellationToken cancellationToken)
@@ -227,7 +265,76 @@ namespace IdentityDapperCore.Stores
             return Task.FromResult(user.PasswordHash != null);
         }
 
-      
+        public async Task AddToRoleAsync(ApplicationUser user, string roleName, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
 
+            using (var connection = new SqlConnection(_connectionString))
+            {
+                await connection.OpenAsync(cancellationToken);
+
+                var sqlRole = "SELECT ID FROM ApplicationRole where Name = @Name";
+
+                var returnedRoleID = await connection.QueryFirstOrDefaultAsync<int>(sqlRole, new { Name = roleName });
+
+                var sql = " INSERT INTO [ApplicationUserRole] " +
+                          "            ([UserID]				" +
+                          "            ,[RoleID])				" +
+                          "      VALUES						" +
+                          "            (@UserID				" +
+                          "            ,@RoleID)				";
+                await connection.ExecuteAsync(sql, new { UserID = user.Id, RoleID = returnedRoleID });
+
+            }
+        }
+
+        public Task RemoveFromRoleAsync(ApplicationUser user, string roleName, CancellationToken cancellationToken)
+        {
+            throw new NotImplementedException();
+        }
+
+        public async Task<IList<string>> GetRolesAsync(ApplicationUser user, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            using (var connection = new SqlConnection(_connectionString))
+            {
+                await connection.OpenAsync(cancellationToken);
+
+                var sqlRoles = " select Name from ApplicationRole R                    " +
+                               " inner join ApplicationUserRole UR on UR.ROLEID = R.ID " +
+                               " WHERE UR.USERID = @USERID							   ";
+
+                var roles = await connection.QueryAsync<string>(sqlRoles, new { USERID = user.Id });
+                return await Task.FromResult(roles.ToList());
+
+            }
+        }
+
+        public async Task<bool> IsInRoleAsync(ApplicationUser user, string roleName, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            using (var connection = new SqlConnection(_connectionString))
+            {
+                await connection.OpenAsync(cancellationToken);
+
+                var sqlRole = "SELECT ID FROM ApplicationRole where Name = @Name";
+
+                var returnedRoleID = await connection.QueryFirstOrDefaultAsync<int>(sqlRole, new { Name = roleName });
+
+                var sql = " Select UserID from [ApplicationUserRole] " +
+                          " WHERE RoleID =@RoleID and UserID=@UserID " ;
+
+                var returnedUserID= await connection.QueryFirstOrDefaultAsync<int>(sql, new { UserID = user.Id, RoleID = returnedRoleID });
+
+                return await Task.FromResult(returnedUserID == user.Id);
+            }
+        }
+
+        public Task<IList<ApplicationUser>> GetUsersInRoleAsync(string roleName, CancellationToken cancellationToken)
+        {
+            throw new NotImplementedException();
+        }
     }
 }

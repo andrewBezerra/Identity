@@ -27,12 +27,27 @@ namespace Portal
         {
             services.AddTransient<IUserStore<ApplicationUser>, UserStore>();
             services.AddTransient<IRoleStore<ApplicationRole>, RoleStore>();
+            services.AddTransient<IUserRoleStore<ApplicationUser>, UserRoleStore>();
 
-            services.AddIdentity<ApplicationUser, ApplicationRole>()
+            services.AddIdentity<ApplicationUser, ApplicationRole>(options=>
+            {
+                options.Password.RequiredLength = 10;
+                options.Password.RequireDigit = false;
+                options.User.RequireUniqueEmail = true;
+            
+            }).AddRoles<ApplicationRole>()
                 .AddDefaultTokenProviders();
 
+            services.ConfigureApplicationCookie(options=>
+            {
+                options.LoginPath = "/Secreto/login";
+                options.Cookie.Name = "SecretoCK";
+                options.AccessDeniedPath = "/Secreto/Deny";
+
+            });
+
             services.AddControllersWithViews();
-            
+
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
