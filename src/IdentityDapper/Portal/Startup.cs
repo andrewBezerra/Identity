@@ -27,7 +27,7 @@ namespace Portal
         {
             services.AddTransient<IUserStore<ApplicationUser>, UserStore>();
             services.AddTransient<IRoleStore<ApplicationRole>, RoleStore>();
-            services.AddTransient<IUserRoleStore<ApplicationUser>, UserRoleStore>();
+         
 
             services.AddIdentity<ApplicationUser, ApplicationRole>(options=>
             {

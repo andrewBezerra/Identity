@@ -1,0 +1,12 @@
+FROM mcr.microsoft.com/dotnet/core/sdk:3.1 AS build-env
+
+RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y openjdk-11-jdk 
+COPY . ./
+RUN dotnet restore IdentityDapperCore/IdentityDapperCore.csproj 
+RUN dotnet restore Portal/Portal.csproj  
+
+RUN dotnet tool install -g dotnet-sonarscanner
+ENV PATH="${PATH}:/root/.dotnet/tools"
+RUN dotnet sonarscanner begin /k:"IdentityDapper" /d:sonar.host.url="http://192.168.85.102:9000" /d:sonar.verbose=true  /v:1.0.0 /d:sonar.login="d7bd8b96025d5a210845e1cdc0efb4b56d34e48f" 
+RUN dotnet build
+RUN dotnet sonarscanner end /d:sonar.login="d7bd8b96025d5a210845e1cdc0efb4b56d34e48f"
